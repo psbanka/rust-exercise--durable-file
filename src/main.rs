@@ -1,19 +1,20 @@
+// https://ferrous-systems.github.io/teaching-material/assignments/durable-file.html
 use std::fs::File;
 use std::io::{Read, Write};
 
 #[derive(Debug)]
-pub struct DurableFile<'a> {
-    file: &'a mut File,
+pub struct DurableFile {
+    file: File,
     // needs_sync: bool,
 }
 
-impl <'a> DurableFile<'a> {
-    pub fn new(file: &'a mut File) -> DurableFile<'a> {
+impl  DurableFile {
+    pub fn new(file: File) -> DurableFile {
         DurableFile { file: file }
     }
 }
 
-impl <'a> Write for DurableFile<'a> {
+impl  Write for DurableFile {
     fn flush(&mut self) -> Result<(), std::io::Error> {
         self.file.sync_all()?;
         self.file.flush()
@@ -36,7 +37,7 @@ impl <'a> Write for DurableFile<'a> {
     }
 }
 
-impl <'a>  Read for DurableFile <'a>  {
+impl   Read for DurableFile   {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let stuff = self.file.read(buf)?;
         // dbg!("read");
@@ -54,32 +55,53 @@ fn main() {}
 mod tests {
     use crate::DurableFile;
     use std::io::{Read, Write};
-    use tempdir::TempDir;
+    // use tempdir::TempDir;
     use std::fs::OpenOptions;
 
     #[test]
     fn write_test() {
-        let dir = TempDir::new("tests").unwrap();
-        let mut file = OpenOptions::new()
+        let dir = tempdir::TempDir::new("tests").unwrap();
+        {
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(dir.path().join("bar.txt"))
+                .unwrap();
+            let mut durable_file = DurableFile::new(file);
+            match durable_file.write(b"hello") {
+                Ok(_) => println!(""),
+                Err(d) => println!("didn't write file: {d}"),
+            };
+        }
+
+        let file = OpenOptions::new()
             .read(true)
-            .write(true)
-            .create(true)
-            .open(dir.path().join("foo.txt"))
+            .open(dir.path().join("bar.txt"))
             .unwrap();
-        let mut durable_file = DurableFile::new(&mut file);
-        match durable_file.write(b"hello") {
-            Ok(_) => println!(""),
-            Err(d) => println!("didn't write file: {d}"),
-        };
+
+        let mut durable_file = DurableFile::new(file);
 
         let mut container_string = [0; 5];
-        match durable_file.read(&mut container_string) {
-            Ok(y) => println!("Success!{y}"),
-            Err(d) => println!("failed to read file: {d}"),
-        };
-        dbg!(&container_string);
-        assert_eq!(&container_string, b"hello");
-        // Look how smart we are: if we use file here, it's gonna get mad.
-        // file.write(b"hello world").unwrap();
+        let read_size = durable_file.read(&mut container_string).unwrap();
+
+        assert_eq!(b"hello", &container_string);
+        assert_eq!(5, read_size);
+    }
+
+    #[test]
+    fn read_test() {
+        let file = OpenOptions::new()
+            .read(true)
+            .open("./foo.txt")
+            .unwrap();
+
+        let mut durable_file = DurableFile::new(file);
+
+        let mut container_string = [0; 5];
+        let read_size = durable_file.read(&mut container_string).unwrap();
+
+        assert_eq!(b"hello", &container_string);
+        assert_eq!(5, read_size)
     }
 }
