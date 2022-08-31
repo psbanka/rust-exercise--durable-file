@@ -12,6 +12,11 @@ impl  DurableFile {
     pub fn new(file: File) -> DurableFile {
         DurableFile { file: file, needs_sync: false }
     }
+
+    pub fn close(self) {
+        let mut df = self;
+        let _ = df.flush();
+    }
 }
 
 impl  Write for DurableFile {
@@ -40,9 +45,6 @@ impl Drop for DurableFile {
         }
     }
 }
-
-// impl From for DurableFile {
-// }
 
 fn main() {}
 
